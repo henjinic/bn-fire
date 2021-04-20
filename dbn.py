@@ -7,6 +7,7 @@ import time
 
 init_coords = [ # row, col
     (2, 1),
+    (5, 9)
 ]
 
 from_to_probs = {
@@ -240,7 +241,7 @@ class Timer:
 def main():
     grid = np.loadtxt("data/Italy_fueltype.csv", delimiter=",")[:25, :25]
 
-    dbn = DBN(grid, 5)
+    dbn = DBN(grid, 10)
 
     result = dbn.predict()
 
