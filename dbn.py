@@ -202,27 +202,9 @@ class TruthTable: # [[self(t-1), ..., self(t)], ...]
 
 class ProbCalculator:
 
-    MIN_COUNT = 2
-    MAX_COUNT = 5
-
-    count_rank_pairs = {}
-    for count in range(MIN_COUNT, MAX_COUNT + 1):
-        count_rank_pairs[count] = {}
-
-        for rank in range(1, count + 1):
-            count_rank_pairs[count][rank] = list(itertools.combinations(range(count), rank))
-
     @classmethod
     def calc(cls, *args):
-        result = 0
-        sign = 1
-        for rank in range(1, len(args) + 1):
-            pairs = ProbCalculator.count_rank_pairs[len(args)][rank]
-            result += sum(math.prod(map(lambda x: args[x], pair)) for pair in pairs) * sign
-            sign *= -1
-
-        return result
-
+        return 1 - math.prod(1 - prob for prob in args)
 
 class Timer:
 

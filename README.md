@@ -12,7 +12,8 @@
 * Parameters
   * 구하고자 하는 확률들 (p<sub>1</sub>, p<sub>2</sub>, ..., p<sub>n</sub>)
 * Return
-  * p<sub>1</sub> + ... + p<sub>n</sub> - (p<sub>1</sub> * p<sub>2</sub> + ... p<sub>n-1</sub> * p<sub>n</sub>) + (p<sub>1</sub> * p<sub>2</sub> * p<sub>3</sub> + ... p<sub>n-2</sub> * p<sub>n-1</sub> * p<sub>n</sub>) - ...
+  * ~~p<sub>1</sub> + ... + p<sub>n</sub> - (p<sub>1</sub> * p<sub>2</sub> + ... p<sub>n-1</sub> * p<sub>n</sub>) + (p<sub>1</sub> * p<sub>2</sub> * p<sub>3</sub> + ... p<sub>n-2</sub> * p<sub>n-1</sub> * p<sub>n</sub>) - ...~~
+  * 1 - (1 - p<sub>1</sub>)(1 - p<sub>2</sub>)...(1 - p<sub>n</sub>)
 * Example
 ```py
 >>> ProbCalculator.calc(0.25)
