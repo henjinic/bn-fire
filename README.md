@@ -9,7 +9,7 @@
 ```py
 >>> from dbn import FireSpreadModel
 >>> model = FireSpreadModel([(2, 1)])
->>> model.prob_grid[:5, :5]
+>>> model.prob_grid[:4, :4]
 array([[0., 0., 0., 0.],
        [0., 0., 0., 0.],
        [0., 1., 0., 0.],
