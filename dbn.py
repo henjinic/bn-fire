@@ -1,234 +1,151 @@
-import itertools
-import math
 import numpy as np
-import pomegranate as pg
-import time
+from utils import ProbCalc
 
 
-init_coords = [ # row, col
-    (2, 1),
-    (5, 9)
-]
+class SpreadProbGrid:
+    import pandas as pd
 
-from_to_probs = {
-    1: {
-        1: 0.3,
-        2: 0.375,
-        3: 0.45,
-        4: 0.225,
-        5: 0.25,
-        6: 0.075,
-        7: 0
-    },
-    2: {
-        1: 0.375,
-        2: 0.375,
-        3: 0.475,
-        4: 0.325,
-        5: 0.25,
-        6: 0.1,
-        7: 0
-    },
-    3: {
-        1: 0.25,
-        2: 0.35,
-        3: 0.475,
-        4: 0.25,
-        5: 0.3,
-        6: 0.075,
-        7: 0
-    },
-    4: {
-        1: 0.275,
-        2: 0.4,
-        3: 0.475,
-        4: 0.35,
-        5: 0.475,
-        6: 0.275,
-        7: 0
-    },
-    5: {
-        1: 0.25,
-        2: 0.3,
-        3: 0.375,
-        4: 0.2,
-        5: 0.35,
-        6: 0.075,
-        7: 0
-    },
-    6: {
-        1: 0.25,
-        2: 0.375,
-        3: 0.475,
-        4: 0.35,
-        5: 0.25,
-        6: 0.075,
-        7: 0
-    },
-    7: {
-        1: 0,
-        2: 0,
-        3: 0,
-        4: 0,
-        5: 0,
-        6: 0,
-        7: 0
-    }
-}
+    def __init__(self):
+        self._code_grid = np.loadtxt("data/Italy_fueltype.csv", delimiter=",")
+
+        prob_df = self.pd.read_csv("data/spread_prob_table.csv", index_col="neighbor")
+        prob_df.columns = prob_df.columns.astype(int)
+
+        self._from_to_probs = {}
+
+        for from_code in prob_df.columns:
+            to_probs = {}
+            column = prob_df[from_code]
+
+            for to_code in column.index:
+                to_probs[to_code] = column[to_code]
+
+            self._from_to_probs[from_code] = to_probs
+
+    @property
+    def shape(self):
+        return self._code_grid.shape
+
+    def get_prob(self, from_coord, to_coord):
+        return self._from_to_probs[self._code_grid[from_coord]][self._code_grid[to_coord]]
 
 
 class DBN:
 
-    def __init__(self, code_grid, max_t):
-        self._code_grid = code_grid
-        self._height = self._code_grid.shape[0]
-        self._width = self._code_grid.shape[1]
-        self._size = self._code_grid.size
+    def __init__(self, initial_prob_grid, spread_prob_grid):
+        self._prob_grid = initial_prob_grid
+        self._spread_prob_grid = spread_prob_grid
+        self._t = 0
 
-        self._max_t = max_t
+    @property
+    def prob_grid(self):
+        return self._prob_grid.copy()
 
-        self._truth_table = TruthTable()
+    @property
+    def t(self):
+        return self._t
 
-        self._model = pg.BayesianNetwork("dbn")
+    def next(self, mask=None):
+        new_prob_grid = np.zeros(self._prob_grid.shape)
 
-        self._t_raw_grids = {}
-        self._t_node_grids = {}
+        for (r, c), prob in np.ndenumerate(self._prob_grid):
+            probs = self._get_adjacent_probs(r, c, mask)
+            probs.append(prob)
+            new_prob_grid[r, c] = ProbCalc.union(*probs)
 
-        self._t_raw_grids[0] = self._get_empty_grid()
-        self._t_node_grids[0] = self._get_empty_grid()
+        self._t += 1
 
-        # init t0 nodes
-        for (r, c), _ in np.ndenumerate(self._t_raw_grids[0]):
-            if (r, c) in init_coords:
-                self._t_raw_grids[0][r, c] = pg.DiscreteDistribution({"T": 1, "F": 0})
-            else:
-                self._t_raw_grids[0][r, c] = pg.DiscreteDistribution({"T": 0, "F": 1})
+        self._prob_grid = new_prob_grid
 
-            node = pg.Node(self._t_raw_grids[0][r, c], name=f"t0({r}, {c})")
-            self._t_node_grids[0][r, c] = node
-            self._model.add_state(node)
+        return self._prob_grid
 
-        # init t1 ~ tmax nodes and edges
-        for t in range(1, self._max_t + 1):
-            self._t_raw_grids[t] = self._get_empty_grid()
-            self._t_node_grids[t] = self._get_empty_grid()
+    def _get_adjacent_probs(self, r, c, mask):
+        result = []
 
-            for (r, c), _ in np.ndenumerate(self._t_raw_grids[t]):
-                parents = [self._t_raw_grids[t - 1][r, c]]
-                parent_nodes = [self._t_node_grids[t - 1][r, c]]
-                probs = []
+        for ar, ac in [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]:
+            if not self._is_valid_coord((ar, ac)):
+                continue
 
-                for (dr, dc), direction in zip([(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)],
-                                               ["down", "up", "right", "left"]):
-                    if self._is_valid_coord(dr, dc):
-                        parents.append(self._t_raw_grids[t - 1][dr, dc])
-                        parent_nodes.append(self._t_node_grids[t - 1][dr, dc])
-                        probs.append(from_to_probs[self._code_grid[dr, dc]][self._code_grid[r, c]])
+            if (mask is not None) and not (mask[ar, ac]):
+                continue
 
-                self._t_raw_grids[t][r, c] = pg.ConditionalProbabilityTable(self._truth_table.get(*probs), parents)
-                node = pg.Node(self._t_raw_grids[t][r, c], name=f"t{t}({r}, {c})")
-                self._t_node_grids[t][r, c] = node
-                self._model.add_state(node)
+            prob = self._spread_prob_grid.get_prob((ar, ac), (r, c)) * self._prob_grid[ar, ac]
 
-                for parent_node in parent_nodes:
-                    self._model.add_edge(parent_node, node)
-
-        with Timer("baking"):
-            self._model.bake()
-
-    def predict(self):
-        row = ["F"] * self._height * self._width
-        row.extend([None] * self._height * self._width * self._max_t)
-
-        for r, c in init_coords:
-            row[r * self._width + c] = "T"
-
-        with Timer("prediction"):
-            nodes = self._model.predict_proba([row])[0]
-
-        result = {}
-
-        for t in range(1, self._max_t + 1):
-            probs = [node.probability("T") for node in nodes[self._size * t: self._size * (t + 1)]]
-            result[t] = np.array(probs)
-            result[t] = result[t].reshape((self._height, self._width))
+            result.append(prob)
 
         return result
 
-    def _is_valid_coord(self, r, c):
-        if r < 0 or c < 0:
+    def _is_valid_coord(self, coord):
+        if coord[0] < 0 or coord[1] < 0:
             return False
 
-        if r >= self._height or c >= self._width:
+        if coord[0] >= self._prob_grid.shape[0] or coord[1] >= self._prob_grid.shape[1]:
             return False
 
         return True
 
-    def _get_empty_grid(self):
+    def __str__(self):
+        return self._prob_grid.__str__()
 
-        return np.empty((self._height, self._width), dtype=object)
 
+class FireSpreadModel:
 
-class TruthTable: # [[self(t-1), ..., self(t)], ...]
+    BURNDOWN_TIME = 2
+    BURN_THRESHOLD = 0.7
 
-    def __init__(self):
-        self._cache = {}
+    def __init__(self, fire_coords, burn_down=True):
+        spread_prob_grid = SpreadProbGrid()
+        self._shape = spread_prob_grid.shape
+        self._burn_down = burn_down
+        self._fire_coords = []
+        self._fire_time_grid = np.zeros(self._shape)
 
-    def get(self, *args):
-        if args in self._cache:
-            return self._cache[args]
+        initial_prob_grid = np.zeros(self._shape)
 
-        result = []
-        for truths in itertools.product("TF", repeat=len(args) + 2):
-            if truths[0] == "T" and truths[-1] == "F":
-                result.append([*truths, 0])
-            elif truths[0] == "T" and truths[-1] == "T":
-                result.append([*truths, 1])
-            elif all(True if truth == "F" else False for truth in truths[:-1]):
-                result.append([*truths, 0 if truths[-1] == "T" else 1])
+        for coord in fire_coords:
+            initial_prob_grid[coord] = 1
+
+        self._dbn = DBN(initial_prob_grid, spread_prob_grid)
+
+        if self._burn_down:
+            self._update_fire_time_grid()
+
+    @property
+    def t(self):
+        return self._dbn.t
+
+    @property
+    def prob_grid(self):
+        return self._dbn.prob_grid
+
+    def run(self, t):
+        for _ in range(t):
+            if self._burn_down:
+                self._dbn.next(self._fire_time_grid <= FireSpreadModel.BURNDOWN_TIME)
+                self._update_fire_time_grid()
             else:
-                indices = [i for i, truth in enumerate(truths[1: -1]) if truth == "T"]
-                if len(indices) == 1:
-                    prob = args[indices[0]]
-                    result.append([*truths, prob if truths[-1] == "T" else 1 - prob])
-                elif len(indices) >= 2:
-                    prob = ProbCalculator.calc(*(args[idx] for idx in indices))
-                    result.append([*truths, prob if truths[-1] == "T" else 1 - prob])
+                self._dbn.next()
 
-        self._cache[args] = result
+    def save(self, path, fmt="%.4f"):
+        np.savetxt(path, self._dbn.prob_grid, fmt=fmt, delimiter=',')
 
-        return result
+    def _update_fire_time_grid(self):
+        self._fire_time_grid[self._dbn.prob_grid >= FireSpreadModel.BURN_THRESHOLD] += 1
 
-
-class ProbCalculator:
-
-    @classmethod
-    def calc(cls, *args):
-        return 1 - math.prod(1 - prob for prob in args)
-
-class Timer:
-
-    def __init__(self, text):
-        self._text = text
-        self._start_time = time.time()
-        print(f"{self._text} starts.")
-
-    def __enter__(self):
-        return
-
-    def __exit__(self, type, value, traceback):
-        print(f"{self._text} ends.", f"({round(time.time() - self._start_time, 2)} sec)")
-
+    def __str__(self):
+        return self._dbn.__str__()
 
 def main():
-    grid = np.loadtxt("data/Italy_fueltype.csv", delimiter=",")[:25, :25]
+    model = FireSpreadModel(
+        fire_coords=[
+            (2, 1),
+        ]
+    )
 
-    dbn = DBN(grid, 10)
-
-    result = dbn.predict()
-
-    for t in result:
-        np.savetxt(f"results/t{t}.csv", result[t], fmt="%.4f")
+    model.run(10)
+    model.save(f"results/{model.t}.csv")
+    model.run(10)
+    model.save(f"results/{model.t}.csv")
 
 if __name__ == "__main__":
     main()
