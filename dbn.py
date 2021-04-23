@@ -1,30 +1,34 @@
 import numpy as np
+import pandas as pd
 from utils import ProbCalc
 
 
+def csv_to_ftp(path):
+    prob_df = pd.read_csv(path, index_col="neighbor")
+    prob_df.columns = prob_df.columns.astype(int)
+
+    result = {}
+
+    for from_code in prob_df.columns:
+        to_probs = {}
+        column = prob_df[from_code]
+
+        for to_code in column.index:
+            to_probs[to_code] = column[to_code]
+
+        result[from_code] = to_probs
+
+    return result
+
+def csv_to_grid(path):
+    return np.loadtxt(path, delimiter=",")
+
+
 class SpreadProbGrid:
-    import pandas as pd
 
-    def __init__(self):
-        self._code_grid = np.loadtxt("data/Italy_fueltype.csv", delimiter=",")
-
-        prob_df = self.pd.read_csv("data/spread_prob_table.csv", index_col="neighbor")
-        prob_df.columns = prob_df.columns.astype(int)
-
-        self._from_to_probs = {}
-
-        for from_code in prob_df.columns:
-            to_probs = {}
-            column = prob_df[from_code]
-
-            for to_code in column.index:
-                to_probs[to_code] = column[to_code]
-
-            self._from_to_probs[from_code] = to_probs
-
-    @property
-    def shape(self):
-        return self._code_grid.shape
+    def __init__(self, code_grid, from_to_probs):
+        self._code_grid = code_grid
+        self._from_to_probs = from_to_probs
 
     def get_prob(self, from_coord, to_coord):
         return self._from_to_probs[self._code_grid[from_coord]][self._code_grid[to_coord]]
@@ -93,11 +97,13 @@ class FireSpreadModel:
     BURNDOWN_TIME = 2
     BURN_THRESHOLD = 0.7
 
-    def __init__(self, fire_coords, burn_down=True):
-        spread_prob_grid = SpreadProbGrid()
-        self._shape = spread_prob_grid.shape
+    def __init__(self, code_grid, from_to_probs, fire_coords, burn_down=True):
+        self._shape = code_grid.shape
+
+        spread_prob_grid = SpreadProbGrid(code_grid, from_to_probs)
+
         self._burn_down = burn_down
-        self._fire_coords = []
+
         self._fire_time_grid = np.zeros(self._shape)
 
         initial_prob_grid = np.zeros(self._shape)
@@ -137,15 +143,27 @@ class FireSpreadModel:
 
 def main():
     model = FireSpreadModel(
+        code_grid=np.array([
+            [1, 1, 1, 1],
+            [1, 1, 1, 1],
+            [1, 1, 1, 1],
+            [1, 1, 1, 1]
+        ]),
+        from_to_probs={
+            1: {
+                1: 0.5
+            }
+        },
         fire_coords=[
             (2, 1),
-        ]
+        ],
+        burn_down=True
     )
 
-    model.run(10)
-    model.save(f"results/{model.t}.csv")
-    model.run(10)
-    model.save(f"results/{model.t}.csv")
+    for _ in range(10):
+        model.run(1)
+        print(model.prob_grid)
+
 
 if __name__ == "__main__":
     main()
