@@ -1,37 +1,7 @@
+import math
 import numpy as np
-import pandas as pd
+from spread_prob import SpreadProbGrid
 from utils import ProbCalc
-
-
-def csv_to_ftp(path):
-    prob_df = pd.read_csv(path, index_col="neighbor")
-    prob_df.columns = prob_df.columns.astype(int)
-
-    result = {}
-
-    for from_code in prob_df.columns:
-        to_probs = {}
-        column = prob_df[from_code]
-
-        for to_code in column.index:
-            to_probs[to_code] = column[to_code]
-
-        result[from_code] = to_probs
-
-    return result
-
-def csv_to_grid(path):
-    return np.loadtxt(path, delimiter=",")
-
-
-class SpreadProbGrid:
-
-    def __init__(self, code_grid, from_to_probs):
-        self._code_grid = code_grid
-        self._from_to_probs = from_to_probs
-
-    def get_prob(self, from_coord, to_coord):
-        return self._from_to_probs[self._code_grid[from_coord]][self._code_grid[to_coord]]
 
 
 class DBN:
@@ -94,15 +64,13 @@ class DBN:
 
 class FireSpreadModel:
 
-    BURNDOWN_TIME = 2
-    BURN_THRESHOLD = 0.7
-
-    def __init__(self, code_grid, from_to_probs, fire_coords, burn_down=True):
-        self._shape = code_grid.shape
-
-        spread_prob_grid = SpreadProbGrid(code_grid, from_to_probs)
+    def __init__(self, spread_prob_grid, fire_coords,
+                 burn_down=True, burn_time=2, burn_threshold=0.7):
+        self._shape = spread_prob_grid.shape
 
         self._burn_down = burn_down
+        self._burn_time = burn_time
+        self._burn_threshold = burn_threshold
 
         self._fire_time_grid = np.zeros(self._shape)
 
@@ -127,7 +95,7 @@ class FireSpreadModel:
     def run(self, t):
         for _ in range(t):
             if self._burn_down:
-                self._dbn.next(self._fire_time_grid <= FireSpreadModel.BURNDOWN_TIME)
+                self._dbn.next(self._fire_time_grid <= self._burn_time)
                 self._update_fire_time_grid()
             else:
                 self._dbn.next()
@@ -136,13 +104,17 @@ class FireSpreadModel:
         np.savetxt(path, self._dbn.prob_grid, fmt=fmt, delimiter=',')
 
     def _update_fire_time_grid(self):
-        self._fire_time_grid[self._dbn.prob_grid >= FireSpreadModel.BURN_THRESHOLD] += 1
+        self._fire_time_grid[self._dbn.prob_grid >= self._burn_threshold] += 1
 
     def __str__(self):
         return self._dbn.__str__()
 
+
 def main():
-    model = FireSpreadModel(
+
+    # Example
+
+    spread_prob_grid = SpreadProbGrid(
         code_grid=np.array([
             [1, 1, 1, 1],
             [1, 1, 1, 1],
@@ -151,17 +123,38 @@ def main():
         ]),
         from_to_probs={
             1: {
-                1: 0.5
+                1: 0.3
             }
         },
+        dem=np.array([
+            [60, 30, 0, 0],
+            [60, 30, 0, 0],
+            [60, 30, 0, 0],
+            [60, 30, 0, 0]
+        ]),
+        wind_theta=math.pi / 2,
+        em=0.3,
+        c1=0.045,
+        c2=0.131,
+        a=0.078,
+        v=13,
+        cell_size=30
+    )
+
+    model = FireSpreadModel(
+        spread_prob_grid=spread_prob_grid,
         fire_coords=[
             (2, 1),
         ],
-        burn_down=True
+        burn_down=True,
+        burn_time=2,
+        burn_threshold=0.7
     )
 
-    for _ in range(10):
+    np.set_printoptions(4, suppress=True)
+    for _ in range(5):
         model.run(1)
+        print("t:", model.t)
         print(model.prob_grid)
 
 

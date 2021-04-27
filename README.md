@@ -7,9 +7,12 @@
 
 ## Usage
 ```py
->>> from dbn import FireSpreadModel
+>>> import math
 >>> import numpy as np
->>> model = FireSpreadModel(
+>>> from dbn import FireSpreadModel
+>>> from spread_prob import SpreadProbGrid
+
+>>> spread_prob_grid = SpreadProbGrid(
 ...     code_grid=np.array([
 ...         [1, 1, 1, 1],
 ...         [1, 1, 1, 1],
@@ -18,62 +21,44 @@
 ...     ]),
 ...     from_to_probs={
 ...         1: {
-...             1: 0.4
+...             1: 0.7
 ...         }
 ...     },
+...     dem=np.array([
+...         [60, 30, 0, 0],
+...         [60, 30, 0, 0],
+...         [60, 30, 0, 0],
+...         [60, 30, 0, 0]
+...     ]),
+...     wind_theta=math.pi / 2,
+...     em=0.3,
+...     c1=0.045,
+...     c2=0.131,
+...     a=0.078,
+...     v=13,
+...     cell_size=30
+... )
+
+>>> model = FireSpreadModel(
+...     spread_prob_grid=spread_prob_grid,
 ...     fire_coords=[
-...         (2, 1)
-...     ]
+...         (2, 1),
+...     ],
+...     burn_down=True,
+...     burn_time=2,
+...     burn_threshold=0.7
 ... )
 ```
 ```py
->>> model.run(1)
->>> model.prob_grid
-array([[0. , 0. , 0. , 0. ],
-       [0. , 0.4, 0. , 0. ],
-       [0.4, 1. , 0.4, 0. ],
-       [0. , 0.4, 0. , 0. ]])
-
->>> model.run(1)
->>> model.prob_grid
-array([[0.    , 0.16  , 0.    , 0.    ],
-       [0.2944, 0.64  , 0.2944, 0.    ],
-       [0.64  , 1.    , 0.64  , 0.16  ],
-       [0.2944, 0.64  , 0.2944, 0.    ]])
-
->>> model.run(1)
->>> model.prob_grid
-array([[0.17422336, 0.37504   , 0.17422336, 0.        ],
-       [0.609425  , 0.73772805, 0.609425  , 0.17422336],
-       [0.71979493, 1.        , 0.73772805, 0.37504   ],
-       [0.609425  , 0.71979493, 0.609425  , 0.17422336]])
-
+>>> model.run(5)
 >>> model.t
-3
+5
+>>> model.prob_grid
+array([[1.59966691e-02, 1.26870940e-01, 1.79224924e-02, 6.79589589e-04],
+       [5.82766160e-02, 2.68276094e-01, 6.52493211e-02, 4.27386948e-03],
+       [6.22752267e-02, 1.00000000e+00, 7.00733918e-02, 7.99568608e-03],
+       [2.73269917e-03, 1.28117503e-02, 3.06900512e-03, 1.94915687e-04]])
 ```
 ```py
->>> model1 = FireSpreadModel(
-...    ..., # same as above
-...    burn_down=True
-... )
->>> model1.run(10)
->>> model1.prob_grid
-array([[0.92921432, 0.96677885, 0.97499918, 0.88709497],
-       [0.97078053, 0.99298095, 0.99071377, 0.97499918],
-       [0.97090482, 1.        , 0.99298095, 0.96677885],
-       [0.91265688, 0.97090482, 0.97078053, 0.92921432]])
-
->>> model2 = FireSpreadModel(
-...    ..., # same as above
-...    burn_down=False
-... )
->>> model2.run(10)
->>> model2.prob_grid
-array([[0.99811222, 0.9998865 , 0.99975185, 0.99459267]
-       [0.9999684 , 0.9999996 , 0.99999782, 0.99975185]
-       [0.99999189, 1.        , 0.9999996 , 0.9998865 ]
-       [0.99958082, 0.99999189, 0.9999684 , 0.99811222]])
-```
-```py
->>> model.save("results/file_name.csv")
+>>> model.save("results/file_name.csv", fmt="%.4f")
 ```
