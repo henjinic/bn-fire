@@ -1,18 +1,20 @@
 import math
+import os
 import random
+from datetime import datetime
 from dbn import FireSpreadModel
 from spread_prob import SpreadProbGrid
 from utils import Timer, read_dbf, csv_to_ftp
 
 
-def main():
+def cur_time():
+    return datetime.strftime(datetime.today(), '%y%m%d-%H%M%S')
+
+
+def get_model(r, c):
     code_grid = read_dbf("data/Fueltype.dbf", mapper=int)
     dem = read_dbf("data/Dem.dbf", mapper=float)
     from_to_probs = csv_to_ftp("data/spread_prob_table.csv")
-
-    height, width = code_grid.shape
-    r = random.randrange(height)
-    c = random.randrange(width)
 
     spread_prob_grid = SpreadProbGrid(
         code_grid=code_grid,
@@ -35,10 +37,26 @@ def main():
         burn_threshold=0.7
     )
 
-    with Timer('model.run()'):
-        model.run(100)
+    return model
 
-    model.save(f"results/{r}_{c}_{model.t}.csv", fmt="%.4f")
+
+def main():
+
+    start_coord = (2, 2)
+    end_coord = (3, 4)
+
+    for r in range(start_coord[0], end_coord[0] + 1):
+        for c in range(start_coord[1], end_coord[1] + 1):
+            dir_name = f"{cur_time()}_{r}_{c}"
+
+            os.mkdir(f"results/{dir_name}")
+
+            model = get_model(r, c)
+
+            with Timer(f"({r}, {c})"):
+                for _ in range(5):
+                    model.run(1)
+                    model.save(f"results/{dir_name}/{model.t}.csv", fmt="%.4f")
 
 
 if __name__ == "__main__":
