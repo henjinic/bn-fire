@@ -12,6 +12,10 @@ def read_dbf(path, mapper=float):
     return np.array(result)
 
 
+def read_grid(path):
+    return np.loadtxt(path, delimiter=",", skiprows=6) # 파라미터 데이터 규격에 맞게 적절히 바꾸세요.
+
+
 def csv_to_ftp(path):
     prob_df = pd.read_csv(path, index_col="neighbor")
     prob_df.columns = prob_df.columns.astype(int)
